@@ -27,7 +27,7 @@ def print_banner():
        [JARVIS] - Personal AI Voice Assistant
     ============================================================
        Status    : Active & Ready
-       Provider  : {config.LLM_PROVIDER.UPPER()} (Tool Calling Enabled)
+       Provider  : {config.LLM_PROVIDER.upper()} (Tool Calling Enabled)
        Audio Mic : {mic_info} (Sensitivity: {config.ENERGY_THRESHOLD})
        Commands  : "how are you", "open notepad", "play [song] on youtube", 
                    "what is the time", "weather in [city]", 
