@@ -1,6 +1,6 @@
 """
 speech_engine.py - Robust Multi-Tier Speech-to-Text (STT) and Text-to-Speech (TTS) Engine.
-Supports 100% Offline Mode for both Speech Recognition and Audio Output.
+Supports high-sensitivity microphone listening and 100% Offline voice speech synthesis.
 """
 
 import sys
@@ -56,13 +56,11 @@ class TextToSpeechEngine:
     Multi-Tier Text-To-Speech engine.
     Priority 1: Native Windows SAPI5 (win32com) - 100% Offline & Reliable on Windows.
     Priority 2: pyttsx3 cross-platform offline engine.
-    Fallback: Console text output.
     """
     def __init__(self):
         self.sapi_speaker = None
         self.pyttsx_engine = None
 
-        # Priority 1: Initialize Windows Native SAPI5 Speaker (100% OFFLINE)
         if HAS_WIN32COM:
             try:
                 self.sapi_speaker = win32com.client.Dispatch("SAPI.SpVoice")
@@ -79,18 +77,17 @@ class TextToSpeechEngine:
                             break
                 except Exception:
                     pass
-                print("[TTS Engine]: Native Windows SAPI5 Offline Voice engine initialized.")
+                print("[TTS Engine]: Native Windows SAPI5 Voice engine initialized.")
             except Exception as e:
                 print(f"[TTS Warning]: SAPI5 initialization failed: {e}")
                 self.sapi_speaker = None
 
-        # Priority 2: Initialize pyttsx3 offline fallback
         if not self.sapi_speaker and HAS_PYTTSX3:
             try:
                 self.pyttsx_engine = pyttsx3.init()
                 self.pyttsx_engine.setProperty('rate', config.VOICE_RATE)
                 self.pyttsx_engine.setProperty('volume', config.VOICE_VOLUME)
-                print("[TTS Engine]: pyttsx3 Offline Voice engine initialized.")
+                print("[TTS Engine]: pyttsx3 Voice engine initialized.")
             except Exception as e:
                 print(f"[TTS Warning]: pyttsx3 initialization failed: {e}")
                 self.pyttsx_engine = None
@@ -106,7 +103,6 @@ class TextToSpeechEngine:
         if not spoken_text:
             spoken_text = text
 
-        # Option 1: Native Windows SAPI5 (100% Offline)
         if self.sapi_speaker:
             try:
                 self.sapi_speaker.Speak(spoken_text)
@@ -114,7 +110,6 @@ class TextToSpeechEngine:
             except Exception as e:
                 print(f"[TTS SAPI5 Error]: {e}")
 
-        # Option 2: pyttsx3 engine (100% Offline)
         if self.pyttsx_engine:
             try:
                 self.pyttsx_engine.say(spoken_text)
@@ -126,42 +121,46 @@ class TextToSpeechEngine:
 
 class SpeechToTextEngine:
     """
-    Wrapper around speech_recognition library with robust Offline Fallback support.
+    Wrapper around speech_recognition with high sensitivity and robust fallback support.
     """
     def __init__(self):
         self.recognizer = sr.Recognizer()
         self.recognizer.energy_threshold = config.ENERGY_THRESHOLD
         self.recognizer.dynamic_energy_threshold = True
+        self.recognizer.pause_threshold = config.PAUSE_THRESHOLD
+
+    def get_microphone_device(self) -> sr.Microphone:
+        """Returns configured sr.Microphone instance."""
+        return sr.Microphone(device_index=config.MICROPHONE_INDEX)
 
     def calibrate_ambient_noise(self, microphone: sr.Microphone):
         """Adjusts recognizer sensitivity based on background ambient noise."""
         print("Calibrating microphone for ambient background noise...")
         with microphone as source:
             self.recognizer.adjust_for_ambient_noise(source, duration=config.CALIBRATION_DURATION)
-        print("Microphone calibrated successfully!")
+            # Ensure energy threshold remains sensitive
+            if self.recognizer.energy_threshold > 500:
+                self.recognizer.energy_threshold = 300
+        print(f"Microphone calibrated successfully! (Energy Threshold: {self.recognizer.energy_threshold:.1f})")
 
     def listen_and_recognize(self, microphone: sr.Microphone, timeout: int = 5, phrase_time_limit: int = 8) -> str:
         """
-        Captures audio from microphone and converts to text string.
-        Falls back gracefully to offline mode if internet is disconnected.
+        Captures audio from microphone with live status feedback.
         """
         try:
             with microphone as source:
-                print("\nListening... (Speak your command)")
+                print("\n[Listening...]: Speak your command into your microphone now...")
                 audio = self.recognizer.listen(source, timeout=timeout, phrase_time_limit=phrase_time_limit)
                 
-            print("Processing audio...")
+            print("Processing audio transcript...")
 
-            # 1. Try Online Google STT
+            # Try Online Google STT
             try:
                 text = self.recognizer.recognize_google(audio)
                 print(f"[You Said]: \"{text}\"")
                 return text.strip()
             except sr.RequestError:
-                # Catch internet disconnection / offline network error
                 print("[STT Notice]: Internet offline. Attempting Offline Recognition...")
-                
-                # 2. Try Offline Vosk STT if installed
                 if HAS_VOSK:
                     try:
                         vosk_text = self.recognizer.recognize_vosk(audio)
@@ -169,20 +168,14 @@ class SpeechToTextEngine:
                         return vosk_text.strip()
                     except Exception:
                         pass
-
-                # 3. Offline Keyboard Fallback when offline
-                print("[Offline Mode]: Active. Please type your command below:")
-                try:
-                    fallback_text = input("⌨️ [Offline Input] Command: ").strip()
-                    return fallback_text
-                except Exception:
-                    return ""
+                return ""
 
         except sr.WaitTimeoutError:
+            # Listening timed out waiting for audio input
             return ""
         except sr.UnknownValueError:
-            print("[STT]: Could not understand the audio clearly.")
+            print("[STT]: Audio received, but speech was unclear. Please try speaking closer to the mic.")
             return ""
         except Exception as e:
-            print(f"[STT Error]: Audio capture error ({e}).")
+            print(f"[STT Error]: {e}")
             return ""
