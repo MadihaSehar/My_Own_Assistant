@@ -1,17 +1,17 @@
 """
 tools.py - Implementation of system tools/functions callable by the AI Assistant.
-Includes: Web Search, Application Control, Utility Info (Time/Date/Weather), and Media Playback.
+Includes: Web Search, Application Control, Utility Info, Media Playback, and System Status.
 """
 
 import datetime
 import os
+import platform
 import subprocess
 import urllib.parse
 import webbrowser
 import requests
 import config
 
-# Try importing pywhatkit for YouTube automation, provide fallback if missing
 try:
     import pywhatkit
     HAS_PYWHATKIT = True
@@ -26,11 +26,6 @@ except ImportError:
 def web_search(query: str) -> str:
     """
     Searches Google or opens a target website in the default browser.
-    
-    Args:
-        query (str): Search term or URL.
-    Returns:
-        str: Status message for the assistant to report back.
     """
     clean_query = query.strip()
     if clean_query.startswith(("http://", "https://")):
@@ -46,18 +41,12 @@ def web_search(query: str) -> str:
 def open_application(app_name: str) -> str:
     """
     Launches a local application on the host operating system.
-    
-    Args:
-        app_name (str): Name or executable of the application to open.
-    Returns:
-        str: Status message indicating success or failure.
     """
     key = app_name.lower().strip()
     executable = config.APP_MAP.get(key, key)
     
     try:
         if os.name == 'nt':  # Windows
-            # Use start command to execute application asynchronously
             subprocess.Popen(f"start {executable}", shell=True)
         elif os.name == 'posix':  # macOS / Linux
             subprocess.Popen([executable])
@@ -66,18 +55,12 @@ def open_application(app_name: str) -> str:
             
         return f"Successfully launched application: '{app_name}'."
     except Exception as e:
-        return f"Failed to open '{app_name}'. Error details: {str(e)}"
+        return f"Failed to open '{app_name}'. Details: {str(e)}"
 
 
 def get_utility_info(info_type: str, location: str = "") -> str:
     """
     Retrieves utility information such as current system time, date, or local weather.
-    
-    Args:
-        info_type (str): Type of utility requested ('time', 'date', 'weather').
-        location (str, optional): City or location name for weather lookup.
-    Returns:
-        str: Natural language summary of requested information.
     """
     req_type = info_type.lower().strip()
     now = datetime.datetime.now()
@@ -93,7 +76,6 @@ def get_utility_info(info_type: str, location: str = "") -> str:
     elif "weather" in req_type:
         target_location = location.strip() or "Auto"
         try:
-            # Fetch weather from lightweight wttr.in weather API service
             url = f"https://wttr.in/{urllib.parse.quote(target_location)}?format=3"
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
@@ -102,20 +84,15 @@ def get_utility_info(info_type: str, location: str = "") -> str:
             else:
                 return "Unable to fetch weather information right now."
         except Exception as e:
-            return f"Weather lookup failed due to network error: {str(e)}"
+            return f"Weather lookup failed: {str(e)}"
 
     else:
-        return f"Unknown utility type requested: '{info_type}'."
+        return f"Unknown utility type: '{info_type}'."
 
 
 def play_media(query: str) -> str:
     """
     Searches YouTube and plays the requested video or audio track.
-    
-    Args:
-        query (str): Song title, artist, or video search term.
-    Returns:
-        str: Status message.
     """
     clean_query = query.strip()
     if HAS_PYWHATKIT:
@@ -123,13 +100,30 @@ def play_media(query: str) -> str:
             pywhatkit.playonyt(clean_query)
             return f"Playing '{clean_query}' on YouTube."
         except Exception:
-            pass  # Fall back to direct browser link
+            pass
 
-    # Fallback: direct YouTube search in browser
     encoded = urllib.parse.quote_plus(clean_query)
     yt_url = f"https://www.youtube.com/results?search_query={encoded}"
     webbrowser.open(yt_url)
     return f"Opened YouTube search results for '{clean_query}'."
+
+
+def get_system_status() -> str:
+    """
+    Checks system OS, platform details, and battery status.
+    """
+    os_info = f"{platform.system()} {platform.release()}"
+    battery_str = "Battery status not available"
+    try:
+        import psutil
+        battery = psutil.sensors_battery()
+        if battery:
+            plugged = "plugged in" if battery.power_plugged else "on battery power"
+            battery_str = f"Battery is at {battery.percent}% ({plugged})"
+    except Exception:
+        pass
+
+    return f"System running on {os_info}. {battery_str}."
 
 
 # ==========================================
@@ -141,14 +135,11 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Searches Google or opens web pages in the user's browser.",
+            "description": "Searches Google or opens web pages in the browser.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query or web address to search for."
-                    }
+                    "query": {"type": "string", "description": "The search query or URL."}
                 },
                 "required": ["query"]
             }
@@ -158,14 +149,11 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "open_application",
-            "description": "Opens a local desktop application like Notepad, Calculator, Chrome, Command Prompt, Paint, etc.",
+            "description": "Opens local apps like Notepad, Calculator, Chrome, Command Prompt, Paint, Word, Excel, etc.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "app_name": {
-                        "type": "string",
-                        "description": "The name of the application to launch (e.g., 'notepad', 'calculator', 'chrome', 'cmd')."
-                    }
+                    "app_name": {"type": "string", "description": "Application name to launch."}
                 },
                 "required": ["app_name"]
             }
@@ -175,19 +163,16 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "get_utility_info",
-            "description": "Gets system time, date, day of week, or current weather for a location.",
+            "description": "Gets current time, date, day of week, or local weather forecast.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "info_type": {
                         "type": "string",
                         "enum": ["time", "date", "weather"],
-                        "description": "The type of utility information requested ('time', 'date', or 'weather')."
+                        "description": "Type of utility requested."
                     },
-                    "location": {
-                        "type": "string",
-                        "description": "The city or location name if requesting weather (optional)."
-                    }
+                    "location": {"type": "string", "description": "City or location name for weather."}
                 },
                 "required": ["info_type"]
             }
@@ -197,39 +182,38 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "play_media",
-            "description": "Searches and plays a song, music video, or video on YouTube.",
+            "description": "Searches and plays music or videos on YouTube.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The title of the song, artist, or video to play."
-                    }
+                    "query": {"type": "string", "description": "Song title, artist, or video query."}
                 },
                 "required": ["query"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_system_status",
+            "description": "Checks system operating system, battery percentage, and hardware status.",
+            "parameters": {"type": "object", "properties": {}}
+        }
     }
 ]
 
-# Dispatcher mapping function names to Python functions
 TOOL_DISPATCHER = {
     "web_search": web_search,
     "open_application": open_application,
     "get_utility_info": get_utility_info,
-    "play_media": play_media
+    "play_media": play_media,
+    "get_system_status": get_system_status
 }
 
 
 def execute_tool_call(tool_name: str, arguments: dict) -> str:
     """
-    Executes a requested tool function with provided keyword arguments.
-    
-    Args:
-        tool_name (str): Function name as defined in schema.
-        arguments (dict): Parsed JSON arguments dict.
-    Returns:
-        str: Output result of tool execution.
+    Executes a requested tool function with provided arguments.
     """
     func = TOOL_DISPATCHER.get(tool_name)
     if not func:

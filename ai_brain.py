@@ -1,12 +1,13 @@
 """
-ai_brain.py - Intent processing, LLM tool calling, and local fallback engine.
-Integrates OpenAI / Gemini Function Calling to execute local Python actions based on natural language.
+ai_brain.py - Human-like Conversational Engine, Multi-Intent Tool Dispatcher, and Local Fallback.
+Integrates OpenAI / Gemini Function Calling with support for multi-action compound requests and natural small talk.
 """
 
 import sys
 import io
 import json
 import re
+import random
 
 if sys.stdout.encoding != 'utf-8':
     try:
@@ -15,9 +16,8 @@ if sys.stdout.encoding != 'utf-8':
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 import config
-from tools import TOOLS_SCHEMA, execute_tool_call, open_application, web_search, get_utility_info, play_media
+from tools import TOOLS_SCHEMA, execute_tool_call, open_application, web_search, get_utility_info, play_media, get_system_status
 
-# Initialize OpenAI client if library & key are available
 try:
     from openai import OpenAI
     HAS_OPENAI_LIB = True
@@ -27,61 +27,69 @@ except ImportError:
 
 class AIBrain:
     """
-    Core AI reasoning component that interprets natural language user input,
-    decides tool invocation via LLM Tool Calling, and formulates spoken responses.
+    Advanced AI Reasoning Engine with Human Conversational Memory,
+    Multi-Intent Command Processing, and OpenAI / Local Fallback Execution.
     """
     def __init__(self):
         self.provider = config.LLM_PROVIDER
         self.openai_client = None
+        self.history = []
 
         if HAS_OPENAI_LIB and config.OPENAI_API_KEY:
             try:
                 self.openai_client = OpenAI(api_key=config.OPENAI_API_KEY)
                 print("[AI Brain]: Initialized OpenAI Function Calling engine.")
             except Exception as e:
-                print(f"[AI Brain Notice]: Failed to initialize OpenAI client: {e}")
+                print(f"[AI Brain Notice]: Could not initialize OpenAI client: {e}")
 
         if not self.openai_client:
-            print("[AI Brain]: Operating in Rule-Based Local Fallback Mode (No API key required).")
+            print("[AI Brain]: Operating in Enhanced Local Conversational Engine Mode.")
 
     def process_command(self, user_input: str) -> str:
         """
-        Main entry point for processing a user's spoken command.
-        
-        Args:
-            user_input (str): The transcript text from Speech-to-Text.
-        Returns:
-            str: Final natural language response to be spoken by Text-to-Speech.
+        Main entry point for processing user input. Handles multi-intent commands and natural speech.
         """
-        if not user_input:
+        if not user_input or not user_input.strip():
             return ""
 
-        # Use OpenAI tool calling if client is active
+        cleaned_input = user_input.strip()
+
+        # Process with OpenAI API if configured
         if self.openai_client:
-            return self._process_with_openai(user_input)
+            response = self._process_with_openai(cleaned_input)
         else:
-            # Fall back to high-performance local regex intent matcher
-            return self._process_local_fallback(user_input)
+            # Process with local multi-intent engine
+            response = self._process_local_fallback(cleaned_input)
+
+        # Maintain conversation history memory
+        self.history.append({"user": cleaned_input, "assistant": response})
+        if len(self.history) > config.CONVERSATION_HISTORY_LIMIT:
+            self.history.pop(0)
+
+        return response
 
     def _process_with_openai(self, user_input: str) -> str:
         """
-        Processes intent using OpenAI's Function Calling API.
+        Processes intent and multi-tool calls using OpenAI Chat Completions API with Function Calling.
         """
-        messages = [
-            {
-                "role": "system", 
-                "content": (
-                    f"You are {config.ASSISTANT_NAME}, an intelligent voice assistant. "
-                    "Keep spoken responses concise, friendly, and direct. "
-                    "Use available tool calls whenever the user requests web search, application opening, "
-                    "weather, date/time info, or media playback."
-                )
-            },
-            {"role": "user", "content": user_input}
-        ]
+        system_prompt = (
+            f"You are {config.ASSISTANT_NAME}, a warm, highly intelligent, and talkative AI voice assistant. "
+            "Respond naturally like a friendly human companion. "
+            "If the user asks multiple actions (e.g. open an app AND search the web AND check weather), "
+            "call ALL relevant functions simultaneously in a single turn. "
+            "Keep spoken responses fluid, cheerful, concise, and direct."
+        )
+
+        messages = [{"role": "system", "content": system_prompt}]
+
+        # Include conversation history context
+        for turn in self.history:
+            messages.append({"role": "user", "content": turn["user"]})
+            messages.append({"role": "assistant", "content": turn["assistant"]})
+
+        messages.append({"role": "user", "content": user_input})
 
         try:
-            # Step 1: Send prompt + tool definitions to LLM
             response = self.openai_client.chat.completions.create(
                 model=config.OPENAI_MODEL,
                 messages=messages,
@@ -93,9 +101,9 @@ class AIBrain:
             response_message = response.choices[0].message
             tool_calls = response_message.tool_calls
 
-            # Step 2: Check if LLM requested tool execution
+            # Multi-Tool Execution Loop
             if tool_calls:
-                messages.append(response_message)  # Extend conversation history with assistant request
+                messages.append(response_message)
 
                 for tool_call in tool_calls:
                     function_name = tool_call.function.name
@@ -105,7 +113,6 @@ class AIBrain:
                     tool_result = execute_tool_call(function_name, function_args)
                     print(f"[Tool Result]: {tool_result}")
 
-                    # Step 3: Append tool output to conversation
                     messages.append({
                         "tool_call_id": tool_call.id,
                         "role": "tool",
@@ -113,56 +120,128 @@ class AIBrain:
                         "content": tool_result
                     })
 
-                # Step 4: Get final conversational response from LLM
+                # Synthesize final spoken response combining all tool outputs
                 second_response = self.openai_client.chat.completions.create(
                     model=config.OPENAI_MODEL,
                     messages=messages
                 )
                 return second_response.choices[0].message.content
 
-            # If no tool call was needed, return direct LLM response
             return response_message.content
 
         except Exception as e:
-            print(f"[LLM Error]: API request failed: {e}. Falling back to local pattern engine.")
+            print(f"[LLM Notice]: OpenAI API request failed ({e}). Using local engine.")
             return self._process_local_fallback(user_input)
 
     def _process_local_fallback(self, text: str) -> str:
         """
-        Local pattern matcher that works immediately without any external LLM API key.
-        Maps spoken intents directly to tool execution functions.
+        Local multi-intent engine capable of handling compound requests (joined by 'and', 'then', 'also')
+        and natural human small talk.
+        """
+        # Split multi-intent compound commands (e.g. "open notepad AND search python AND check weather")
+        sub_commands = re.split(r"\b(?:and then|and also|and|then|also|plus)\b", text, flags=re.IGNORECASE)
+
+        results = []
+        for sub_cmd in sub_commands:
+            cleaned_sub = sub_cmd.strip()
+            if not cleaned_sub:
+                continue
+            res = self._single_local_intent(cleaned_sub)
+            if res:
+                results.append(res)
+
+        if len(results) == 1:
+            return results[0]
+        elif len(results) > 1:
+            return "Sure thing! " + " ".join(results)
+
+        # Fallback conversational response
+        return random.choice([
+            f"I'm here for you! You mentioned '{text}'. I can open apps, search Google, play music, or check weather for you.",
+            f"That sounds interesting! I heard: '{text}'. How else can I assist you right now?",
+            f"I'm listening! Tell me if you'd like me to launch an app, search the web, check the time, or play a song."
+        ])
+
+    def _single_local_intent(self, text: str) -> str:
+        """
+        Matches a single sub-command against natural human small talk or system tools.
         """
         lowered = text.lower().strip()
 
-        # 1. Media Playback Intent (e.g., "play shape of you on youtube", "play queen")
+        # -------------------------------------------------------------
+        # 1. HUMAN SMALL TALK & CONVERSATIONAL INTENTS
+        # -------------------------------------------------------------
+
+        # Greetings & Status Checks ("how are you", "how's it going", "how are u")
+        if re.search(r"\b(how are you|how are u|how\'s it going|how do you do|how are you doing)\b", lowered):
+            responses = [
+                f"I'm doing fantastic, thank you for asking! I'm ready to help you with anything you need.",
+                f"I'm feeling great and operating at peak performance! How are you doing today?",
+                f"All systems are online and running smoothly! How can I assist you right now?"
+            ]
+            return random.choice(responses)
+
+        # Identity & Name ("who are you", "what is your name")
+        if re.search(r"\b(who are you|what is your name|what\'s your name|who made you|who created you)\b", lowered):
+            return f"I am {config.ASSISTANT_NAME}, your personal AI voice assistant created to help you manage tasks, search the web, play media, and execute system commands!"
+
+        # Capability Questions ("what can you do", "help me", "what are your features")
+        if re.search(r"\b(what can you do|help|features|what do you do|how to use)\b", lowered):
+            return "I can search Google, open applications like Notepad or Chrome, play music or videos on YouTube, check system time, date, and weather forecasts, or check your laptop battery!"
+
+        # Casual Salutations ("hello", "hi", "hey", "good morning", "good evening")
+        if re.search(r"\b(hello|hi|hey|greetings|good morning|good afternoon|good evening)\b", lowered):
+            return f"Hello there! I'm {config.ASSISTANT_NAME}. What can I do for you today?"
+
+        # Gratitude ("thank you", "thanks", "great job")
+        if re.search(r"\b(thank you|thanks|thx|awesome|great job|well done)\b", lowered):
+            return "You're very welcome! I'm always happy to help."
+
+        # Humor & Jokes ("tell me a joke", "make me laugh")
+        if "joke" in lowered or "funny" in lowered:
+            jokes = [
+                "Why do programmers prefer dark mode? Because light attracts bugs!",
+                "Why did the computer go to the doctor? Because it had a virus!",
+                "There are 10 types of people in the world: those who understand binary, and those who don't!"
+            ]
+            return random.choice(jokes)
+
+        # System Battery & Status
+        if "battery" in lowered or "system status" in lowered or "laptop status" in lowered:
+            return get_system_status()
+
+        # -------------------------------------------------------------
+        # 2. SYSTEM TOOL EXECUTIONS
+        # -------------------------------------------------------------
+
+        # Media Playback Intent (e.g. "play shape of you on youtube", "play lofi beats")
         if lowered.startswith("play") or "play on youtube" in lowered:
             query = re.sub(r"^(play|play on youtube|search and play)\s+", "", lowered, flags=re.IGNORECASE)
             query = query.replace("on youtube", "").strip()
             return play_media(query)
 
-        # 2. Application Control Intent (e.g., "open notepad", "launch calculator", "start chrome")
+        # Application Control Intent (e.g. "open notepad", "launch calculator", "start chrome")
         if re.search(r"\b(open|launch|start|run)\b", lowered):
             match = re.search(r"\b(open|launch|start|run)\s+(.+)", lowered)
             if match:
                 app_target = match.group(2).replace("app", "").replace("application", "").strip()
                 return open_application(app_target)
 
-        # 3. Web Search Intent (e.g., "search google for python tutorial", "search for weather forecast")
+        # Web Search Intent (e.g. "search google for python", "look up weather forecast")
         if re.search(r"\b(search|search google for|google|look up)\b", lowered):
             query = re.sub(r"^(search google for|search for|search|google|look up)\s+", "", lowered, flags=re.IGNORECASE)
             return web_search(query)
 
-        # 4. Utility - Time / Date Intent
+        # Utility - Time & Date
         if "time" in lowered:
             return get_utility_info("time")
         if "date" in lowered or "day" in lowered:
             return get_utility_info("date")
 
-        # 5. Utility - Weather Intent (e.g., "what's the weather in London", "weather report")
+        # Utility - Weather Intent
         if "weather" in lowered:
             loc_match = re.search(r"weather\s+(?:in|for|at)\s+([a-zA-Z\s]+)", lowered)
             location = loc_match.group(1).strip() if loc_match else ""
             return get_utility_info("weather", location)
 
-        # Default fallback response for generic conversation
-        return f"I heard you say: '{text}'. You can ask me to open apps, search Google, check time or weather, or play songs on YouTube!"
+        return ""

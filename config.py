@@ -13,8 +13,9 @@ load_dotenv(BASE_DIR / ".env")
 # --- Assistant Settings ---
 ASSISTANT_NAME = "JARVIS"
 VOICE_GENDER = "female"  # 'male' or 'female'
-VOICE_RATE = 175         # Words per minute (default ~200, 175 is clear)
+VOICE_RATE = 175         # Words per minute (175 is clear & natural)
 VOICE_VOLUME = 1.0       # Volume (0.0 to 1.0)
+CONVERSATION_HISTORY_LIMIT = 10  # Remember last N conversation turns
 
 # --- Audio STT Settings ---
 ENERGY_THRESHOLD = 300   # Speech recognition sensitivity threshold
@@ -44,5 +45,10 @@ APP_MAP = {
     "paint": "mspaint.exe",
     "explorer": "explorer.exe",
     "file explorer": "explorer.exe",
-    "task manager": "taskmgr.exe"
+    "task manager": "taskmgr.exe",
+    "spotify": "spotify.exe",
+    "edge": "msedge.exe",
+    "word": "winword.exe",
+    "excel": "excel.exe",
+    "powerpoint": "powerpnt.exe"
 }
