@@ -1,5 +1,5 @@
 """
-test_assistant.py - Automated verification test for JARVIS Voice Assistant talkative responses & multi-intent commands.
+test_assistant.py - Automated verification test for JARVIS Voice Assistant features.
 """
 
 import sys
@@ -16,20 +16,19 @@ from speech_engine import TextToSpeechEngine
 
 def run_tests():
     print("==================================================")
-    print("[JARVIS] RUNNING HUMAN TALKATIVE & MULTI-INTENT TEST SUITE")
+    print("[JARVIS] RUNNING EXTENDED FEATURE SUITE VERIFICATION")
     print("==================================================")
 
     tts = TextToSpeechEngine()
     brain = AIBrain()
 
-    # Test cases testing human conversation + multi-action compound commands
     test_commands = [
         "how are you",
-        "who are you and what can you do",
-        "tell me a joke",
-        "check system battery",
-        "what is the time AND open notepad",
-        "check weather in London AND search python programming"
+        "who is Albert Einstein",
+        "check system resources",
+        "read top news",
+        "take a screenshot",
+        "what is the time AND open calculator"
     ]
 
     for cmd in test_commands:
@@ -39,7 +38,7 @@ def run_tests():
         tts.speak(res)
 
     print("\n==================================================")
-    print("ALL MULTI-INTENT & HUMAN TALKATIVE TESTS PASSED!")
+    print("ALL EXTENDED SUITE FEATURE TESTS COMPLETED!")
     print("==================================================")
 
 if __name__ == "__main__":

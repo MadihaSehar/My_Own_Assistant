@@ -1,6 +1,7 @@
 """
-tools.py - Implementation of system tools/functions callable by the AI Assistant.
-Includes: Web Search, Application Control, Utility Info, Media Playback, and System Status.
+tools.py - Advanced System Tools for JARVIS Voice Assistant.
+Includes: Web Search, App Control, Utility (Time/Date/Weather), Media Playback, 
+System Status, Screenshots, Wikipedia Knowledge Lookup, Top News Headlines, System Resource Monitor, and Audio Control.
 """
 
 import datetime
@@ -18,15 +19,26 @@ try:
 except ImportError:
     HAS_PYWHATKIT = False
 
+try:
+    import wikipedia
+    wikipedia.set_user_agent("JARVISVoiceAssistant/1.0 (madiha56sehar@gmail.com)")
+    HAS_WIKIPEDIA = True
+except Exception:
+    HAS_WIKIPEDIA = False
+
+try:
+    from PIL import ImageGrab
+    HAS_IMAGEGRAB = True
+except ImportError:
+    HAS_IMAGEGRAB = False
+
 
 # ==========================================
 # TOOL IMPLEMENTATIONS
 # ==========================================
 
 def web_search(query: str) -> str:
-    """
-    Searches Google or opens a target website in the default browser.
-    """
+    """Searches Google or opens a target website in the default browser."""
     clean_query = query.strip()
     if clean_query.startswith(("http://", "https://")):
         url = clean_query
@@ -39,9 +51,7 @@ def web_search(query: str) -> str:
 
 
 def open_application(app_name: str) -> str:
-    """
-    Launches a local application on the host operating system.
-    """
+    """Launches a local desktop application."""
     key = app_name.lower().strip()
     executable = config.APP_MAP.get(key, key)
     
@@ -59,9 +69,7 @@ def open_application(app_name: str) -> str:
 
 
 def get_utility_info(info_type: str, location: str = "") -> str:
-    """
-    Retrieves utility information such as current system time, date, or local weather.
-    """
+    """Retrieves utility information such as system time, date, or weather."""
     req_type = info_type.lower().strip()
     now = datetime.datetime.now()
 
@@ -91,9 +99,7 @@ def get_utility_info(info_type: str, location: str = "") -> str:
 
 
 def play_media(query: str) -> str:
-    """
-    Searches YouTube and plays the requested video or audio track.
-    """
+    """Searches YouTube and plays the requested video or audio track."""
     clean_query = query.strip()
     if HAS_PYWHATKIT:
         try:
@@ -108,22 +114,92 @@ def play_media(query: str) -> str:
     return f"Opened YouTube search results for '{clean_query}'."
 
 
-def get_system_status() -> str:
-    """
-    Checks system OS, platform details, and battery status.
-    """
-    os_info = f"{platform.system()} {platform.release()}"
-    battery_str = "Battery status not available"
+def search_wikipedia(topic: str) -> str:
+    """Fetches a concise summary of a topic from Wikipedia or Google."""
+    if not HAS_WIKIPEDIA:
+        return web_search(topic)
+    try:
+        wikipedia.set_lang("en")
+        summary = wikipedia.summary(topic, sentences=2)
+        return f"According to Wikipedia: {summary}"
+    except Exception:
+        return web_search(topic)
+
+
+def take_screenshot() -> str:
+    """Captures a screenshot of the primary screen and saves it to disk."""
+    if not HAS_IMAGEGRAB:
+        return "Screenshot feature requires Pillow."
+    try:
+        pictures_dir = os.path.join(os.path.expanduser("~"), "Pictures")
+        os.makedirs(pictures_dir, exist_ok=True)
+            
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"screenshot_{timestamp}.png"
+        filepath = os.path.join(pictures_dir, filename)
+        
+        screenshot = ImageGrab.grab(all_screens=True)
+        screenshot.save(filepath)
+        return f"Screenshot saved successfully to Pictures folder as '{filename}'."
+    except Exception as e:
+        return f"Screenshot captured: {str(e)}"
+
+
+def get_system_resources() -> str:
+    """Checks CPU usage, RAM memory consumption, and battery status."""
     try:
         import psutil
+        cpu_usage = psutil.cpu_percent(interval=0.5)
+        ram = psutil.virtual_memory()
+        ram_used_gb = round(ram.used / (1024**3), 1)
+        ram_total_gb = round(ram.total / (1024**3), 1)
+        ram_percent = ram.percent
+        
+        battery_info = ""
         battery = psutil.sensors_battery()
         if battery:
             plugged = "plugged in" if battery.power_plugged else "on battery power"
-            battery_str = f"Battery is at {battery.percent}% ({plugged})"
-    except Exception:
-        pass
+            battery_info = f"Battery is at {battery.percent}% ({plugged})."
 
-    return f"System running on {os_info}. {battery_str}."
+        return f"CPU usage is at {cpu_usage}%. RAM usage is {ram_percent}% ({ram_used_gb} GB of {ram_total_gb} GB used). {battery_info}"
+    except Exception as e:
+        return f"Could not retrieve system resources: {str(e)}"
+
+
+def get_news_headlines() -> str:
+    """Fetches current top news headlines."""
+    try:
+        res = requests.get("https://feeds.bbci.co.uk/news/rss.xml", timeout=4)
+        if res.status_code == 200:
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(res.text)
+            titles = [item.find('title').text for item in root.findall('.//item')[:3]]
+            if titles:
+                return "Latest BBC News headlines: " + "; ".join(titles)
+            
+        return "Unable to fetch news headlines at the moment."
+    except Exception:
+        return "Latest news: Opening news search in your browser."
+
+
+def control_system_volume(action: str) -> str:
+    """Controls OS audio volume (mute, unmute, up, down)."""
+    if os.name != 'nt':
+        return f"Volume control currently supported on Windows."
+    try:
+        act = action.lower().strip()
+        if "mute" in act:
+            subprocess.run("powershell -c \"(New-Object -ComObject WScript.Shell).SendKeys([char]173)\"", shell=True)
+            return "System volume muted."
+        elif "unmute" in act or "up" in act or "increase" in act:
+            subprocess.run("powershell -c \"(New-Object -ComObject WScript.Shell).SendKeys([char]175)\"", shell=True)
+            return "System volume increased."
+        elif "down" in act or "decrease" in act or "lower" in act:
+            subprocess.run("powershell -c \"(New-Object -ComObject WScript.Shell).SendKeys([char]174)\"", shell=True)
+            return "System volume decreased."
+        return f"Volume adjustment '{action}' executed."
+    except Exception as e:
+        return f"Failed to control volume: {str(e)}"
 
 
 # ==========================================
@@ -149,7 +225,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "open_application",
-            "description": "Opens local apps like Notepad, Calculator, Chrome, Command Prompt, Paint, Word, Excel, etc.",
+            "description": "Opens local apps like Notepad, Calculator, Chrome, Command Prompt, Paint, Word, Excel, Spotify, Edge, etc.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -195,9 +271,57 @@ TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
-            "name": "get_system_status",
-            "description": "Checks system operating system, battery percentage, and hardware status.",
+            "name": "search_wikipedia",
+            "description": "Fetches a summary of a person, event, concept, or topic from Wikipedia.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "description": "Topic to search on Wikipedia."}
+                },
+                "required": ["topic"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "take_screenshot",
+            "description": "Captures a screenshot of the user's screen and saves it.",
             "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_system_resources",
+            "description": "Checks system CPU usage, RAM memory consumption, and battery status.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_news_headlines",
+            "description": "Fetches the latest breaking top news headlines.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "control_system_volume",
+            "description": "Controls system audio volume (mute, unmute, volume up, volume down).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["mute", "unmute", "up", "down"],
+                        "description": "Action to perform on system volume."
+                    }
+                },
+                "required": ["action"]
+            }
         }
     }
 ]
@@ -207,14 +331,16 @@ TOOL_DISPATCHER = {
     "open_application": open_application,
     "get_utility_info": get_utility_info,
     "play_media": play_media,
-    "get_system_status": get_system_status
+    "search_wikipedia": search_wikipedia,
+    "take_screenshot": take_screenshot,
+    "get_system_resources": get_system_resources,
+    "get_news_headlines": get_news_headlines,
+    "control_system_volume": control_system_volume
 }
 
 
 def execute_tool_call(tool_name: str, arguments: dict) -> str:
-    """
-    Executes a requested tool function with provided arguments.
-    """
+    """Executes a requested tool function with provided arguments."""
     func = TOOL_DISPATCHER.get(tool_name)
     if not func:
         return f"Error: Tool '{tool_name}' not found."

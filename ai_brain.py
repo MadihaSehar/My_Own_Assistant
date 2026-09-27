@@ -16,7 +16,11 @@ if sys.stdout.encoding != 'utf-8':
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 import config
-from tools import TOOLS_SCHEMA, execute_tool_call, open_application, web_search, get_utility_info, play_media, get_system_status
+from tools import (
+    TOOLS_SCHEMA, execute_tool_call, open_application, web_search, 
+    get_utility_info, play_media, search_wikipedia, take_screenshot, 
+    get_system_resources, get_news_headlines, control_system_volume
+)
 
 try:
     from openai import OpenAI
@@ -157,9 +161,9 @@ class AIBrain:
 
         # Fallback conversational response
         return random.choice([
-            f"I'm here for you! You mentioned '{text}'. I can open apps, search Google, play music, or check weather for you.",
+            f"I'm here for you! You mentioned '{text}'. I can open apps, search Google, play music, check weather, or take a screenshot.",
             f"That sounds interesting! I heard: '{text}'. How else can I assist you right now?",
-            f"I'm listening! Tell me if you'd like me to launch an app, search the web, check the time, or play a song."
+            f"I'm listening! Tell me if you'd like me to launch an app, search Wikipedia, check CPU/RAM usage, or play a song."
         ])
 
     def _single_local_intent(self, text: str) -> str:
@@ -172,32 +176,26 @@ class AIBrain:
         # 1. HUMAN SMALL TALK & CONVERSATIONAL INTENTS
         # -------------------------------------------------------------
 
-        # Greetings & Status Checks ("how are you", "how's it going", "how are u")
         if re.search(r"\b(how are you|how are u|how\'s it going|how do you do|how are you doing)\b", lowered):
             responses = [
-                f"I'm doing fantastic, thank you for asking! I'm ready to help you with anything you need.",
-                f"I'm feeling great and operating at peak performance! How are you doing today?",
-                f"All systems are online and running smoothly! How can I assist you right now?"
+                "I'm doing fantastic, thank you for asking! I'm ready to help you with anything you need.",
+                "I'm feeling great and operating at peak performance! How are you doing today?",
+                "All systems are online and running smoothly! How can I assist you right now?"
             ]
             return random.choice(responses)
 
-        # Identity & Name ("who are you", "what is your name")
         if re.search(r"\b(who are you|what is your name|what\'s your name|who made you|who created you)\b", lowered):
             return f"I am {config.ASSISTANT_NAME}, your personal AI voice assistant created to help you manage tasks, search the web, play media, and execute system commands!"
 
-        # Capability Questions ("what can you do", "help me", "what are your features")
         if re.search(r"\b(what can you do|help|features|what do you do|how to use)\b", lowered):
-            return "I can search Google, open applications like Notepad or Chrome, play music or videos on YouTube, check system time, date, and weather forecasts, or check your laptop battery!"
+            return "I can search Google or Wikipedia, open applications, play YouTube music, check weather, CPU/RAM status, take screenshots, read news, or adjust system volume!"
 
-        # Casual Salutations ("hello", "hi", "hey", "good morning", "good evening")
         if re.search(r"\b(hello|hi|hey|greetings|good morning|good afternoon|good evening)\b", lowered):
             return f"Hello there! I'm {config.ASSISTANT_NAME}. What can I do for you today?"
 
-        # Gratitude ("thank you", "thanks", "great job")
         if re.search(r"\b(thank you|thanks|thx|awesome|great job|well done)\b", lowered):
             return "You're very welcome! I'm always happy to help."
 
-        # Humor & Jokes ("tell me a joke", "make me laugh")
         if "joke" in lowered or "funny" in lowered:
             jokes = [
                 "Why do programmers prefer dark mode? Because light attracts bugs!",
@@ -206,13 +204,38 @@ class AIBrain:
             ]
             return random.choice(jokes)
 
-        # System Battery & Status
-        if "battery" in lowered or "system status" in lowered or "laptop status" in lowered:
-            return get_system_status()
+        # -------------------------------------------------------------
+        # 2. SYSTEM TOOLS & ADVANCED CAPABILITIES
+        # -------------------------------------------------------------
 
-        # -------------------------------------------------------------
-        # 2. SYSTEM TOOL EXECUTIONS
-        # -------------------------------------------------------------
+        # Screenshot Intent
+        if "screenshot" in lowered or "capture screen" in lowered or "take a picture of screen" in lowered:
+            return take_screenshot()
+
+        # Wikipedia Knowledge Intent (e.g. "who is Albert Einstein on wikipedia", "search wikipedia for quantum computing")
+        if "wikipedia" in lowered or lowered.startswith("who is") or lowered.startswith("what is a") or lowered.startswith("tell me about"):
+            topic = re.sub(r"\b(search wikipedia for|on wikipedia|who is|what is a|what is|tell me about)\b", "", lowered, flags=re.IGNORECASE).strip()
+            if topic:
+                return search_wikipedia(topic)
+
+        # System Resources & Battery Intent (e.g. "check cpu", "ram usage", "system resources", "battery")
+        if any(k in lowered for k in ["battery", "cpu", "ram", "memory", "system resources", "system specs", "hardware"]):
+            return get_system_resources()
+
+        # News Headlines Intent (e.g. "read the news", "top news", "news headlines")
+        if "news" in lowered or "headlines" in lowered:
+            return get_news_headlines()
+
+        # Volume Control Intent (e.g. "mute audio", "volume up", "volume down", "unmute")
+        if "volume" in lowered or "mute" in lowered or "unmute" in lowered:
+            if "mute" in lowered and "unmute" not in lowered:
+                return control_system_volume("mute")
+            elif "unmute" in lowered:
+                return control_system_volume("unmute")
+            elif "up" in lowered or "increase" in lowered or "raise" in lowered:
+                return control_system_volume("up")
+            elif "down" in lowered or "decrease" in lowered or "lower" in lowered:
+                return control_system_volume("down")
 
         # Media Playback Intent (e.g. "play shape of you on youtube", "play lofi beats")
         if lowered.startswith("play") or "play on youtube" in lowered:
