@@ -4,6 +4,7 @@ main.py - Main entry point and continuous event loop for JARVIS Personal Voice A
 
 import sys
 import io
+import time
 
 if sys.stdout.encoding != 'utf-8':
     try:
@@ -19,84 +20,99 @@ from ai_brain import AIBrain
 EXIT_COMMANDS = {"exit", "quit", "stop", "goodbye", "bye", "shutdown", "turn off", "terminate"}
 
 
-def print_banner():
+def print_banner(mic_info: str):
     """Prints status banner to terminal."""
-    mic_info = f"Device Index {config.MICROPHONE_INDEX}" if config.MICROPHONE_INDEX is not None else "Default Mic"
     banner = f"""
     ============================================================
        [JARVIS] - Personal AI Voice Assistant
     ============================================================
        Status    : Active & Ready
-       Provider  : {config.LLM_PROVIDER.upper()} (Tool Calling Enabled)
-       Audio Mic : {mic_info} (Sensitivity: {config.ENERGY_THRESHOLD})
-       Commands  : "how are you", "open notepad", "play [song] on youtube", 
-                   "what is the time", "weather in [city]", 
-                   "search [query]", "exit" to quit.
+       Provider  : {config.LLM_PROVIDER.upper()} Mode
+       Audio Mic : {mic_info}
+       Threshold : {config.ENERGY_THRESHOLD}
+       Commands  : "how are you", "open notepad",
+                   "what time is it", "weather in [city]",
+                   "play [song] on youtube", "exit" to quit
     ============================================================
     """
     print(banner)
 
 
 def main():
-    """Main execution loop for continuous interaction."""
-    print_banner()
+    """Main execution loop - pure continuous microphone listening."""
 
-    # Step 1: Initialize Assistant Subsystems
+    # ── Step 1: Boot subsystems ──────────────────────────────
     tts = TextToSpeechEngine()
     stt = SpeechToTextEngine()
     brain = AIBrain()
 
-    # Initial Greeting
-    tts.speak(f"Hello! I am {config.ASSISTANT_NAME}, your personal voice assistant. How can I help you today?")
+    # ── Step 2: Connect microphone ──────────────────────────
+    mic_index = config.MICROPHONE_INDEX
+    mic_label = f"Device [{mic_index}]" if mic_index is not None else "Default Microphone"
+    print_banner(mic_label)
 
-    # Step 2: Access Microphone for Audio Input
     try:
         microphone = stt.get_microphone_device()
         stt.calibrate_ambient_noise(microphone)
+        tts.speak(f"Hello! I am {config.ASSISTANT_NAME}, your personal voice assistant. How can I help you?")
+        mic_ok = True
     except Exception as e:
-        print(f"\n[Microphone Notice]: Could not initialize hardware mic ({e}).")
-        print("Switching to Keyboard Text Mode for interaction...")
+        print(f"\n[Microphone Error]: {e}")
+        print("[Fallback]: Keyboard mode active. Type commands below.\n")
         microphone = None
+        mic_ok = False
+        tts.speak(f"Microphone not found. Running in keyboard mode. Type your commands.")
 
-    # Step 3: Continuous Interaction Loop
+    # ── Step 3: Continuous loop ─────────────────────────────
+    print("\n[READY]: JARVIS is listening. Speak now...\n")
+    
     while True:
-        try:
-            command_text = ""
-            
-            # Attempt microphone capture if microphone is available
-            if microphone:
-                command_text = stt.listen_and_recognize(microphone, timeout=5, phrase_time_limit=8)
+        command_text = ""
 
-            # If no spoken audio was detected or microphone timed out, offer instant text input fallback
-            if not command_text:
+        try:
+            if mic_ok and microphone:
+                # ── Pure microphone mode ──────────────────────
+                command_text = stt.listen_and_recognize(microphone, timeout=5, phrase_time_limit=10)
+
+            else:
+                # ── Keyboard fallback (only when mic unavailable) ──
                 try:
-                    command_text = input("⌨️ [Type command or press Enter to listen again]: ").strip()
+                    command_text = input("Type command: ").strip()
                 except (EOFError, KeyboardInterrupt):
                     break
 
-            if not command_text:
-                continue
-
-            cleaned_text = command_text.lower().strip()
-            if any(cleaned_text == cmd or cleaned_text.startswith(cmd) for cmd in EXIT_COMMANDS):
-                tts.speak(f"Goodbye! Shutting down {config.ASSISTANT_NAME}.")
-                print("\nAssistant shut down successfully.")
-                break
-
-            # Step 4: Process Intent & Execute Tools
-            response_text = brain.process_command(command_text)
-
-            # Step 5: Speak Output Response
-            if response_text:
-                tts.speak(response_text)
-
         except KeyboardInterrupt:
-            print("\nKeyboard interrupt detected.")
-            tts.speak("Shutting down voice assistant. Have a great day!")
+            print("\n[JARVIS]: Keyboard interrupt received.")
+            tts.speak("Shutting down. Goodbye!")
             break
         except Exception as e:
-            print(f"\nUnexpected Error: {e}")
+            print(f"[Listen Error]: {e}")
+            time.sleep(0.5)
             continue
+
+        # ── Skip empty results and keep looping immediately ──
+        if not command_text or not command_text.strip():
+            continue
+
+        print(f"\n>>> Heard: \"{command_text}\"")
+
+        # ── Check for exit commands ───────────────────────────
+        cleaned = command_text.lower().strip()
+        if any(cleaned == cmd or cleaned.startswith(cmd) for cmd in EXIT_COMMANDS):
+            tts.speak(f"Goodbye! Shutting down {config.ASSISTANT_NAME}.")
+            print("\n[JARVIS]: Shut down cleanly.")
+            break
+
+        # ── Process intent → Execute tools → Speak response ──
+        try:
+            response = brain.process_command(command_text)
+            if response:
+                tts.speak(response)
+        except Exception as e:
+            print(f"[Brain Error]: {e}")
+            tts.speak("Sorry, I ran into an error. Please try again.")
+
+        print("\n[READY]: Listening again...\n")
 
 
 if __name__ == "__main__":
