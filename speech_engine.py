@@ -1,6 +1,6 @@
 """
 speech_engine.py - Robust Multi-Tier Speech-to-Text (STT) and Text-to-Speech (TTS) Engine.
-Guarantees audio speech playback on Windows (via native SAPI.SpVoice & pyttsx3) and cross-platform OS.
+Supports 100% Offline Mode for both Speech Recognition and Audio Output.
 """
 
 import sys
@@ -33,18 +33,20 @@ try:
 except ImportError:
     HAS_PYTTSX3 = False
 
+# Try importing vosk for offline STT
+try:
+    import vosk
+    HAS_VOSK = True
+except ImportError:
+    HAS_VOSK = False
+
 
 def clean_text_for_speech(raw_text: str) -> str:
-    """
-    Strips markdown, emojis, special symbols, and URLs so the TTS engine speaks naturally.
-    """
+    """Strips markdown, emojis, special symbols, and URLs for clean spoken audio."""
     if not raw_text:
         return ""
-    # Remove URLs
     text = re.sub(r'https?://\S+|www\.\S+', '', raw_text)
-    # Remove markdown formatting (*, #, _, `, [, ])
     text = re.sub(r'[\*\#\_\`\[\]\~\>\`]', '', text)
-    # Remove emojis and non-ASCII/non-latin symbols except standard punctuation
     text = re.sub(r'[^\w\s\.\,\!\?\-\'\":]', '', text)
     return text.strip()
 
@@ -52,19 +54,18 @@ def clean_text_for_speech(raw_text: str) -> str:
 class TextToSpeechEngine:
     """
     Multi-Tier Text-To-Speech engine.
-    Priority 1: Native Windows SAPI5 (win32com) - 100% reliable on Windows.
-    Priority 2: pyttsx3 cross-platform engine.
+    Priority 1: Native Windows SAPI5 (win32com) - 100% Offline & Reliable on Windows.
+    Priority 2: pyttsx3 cross-platform offline engine.
     Fallback: Console text output.
     """
     def __init__(self):
         self.sapi_speaker = None
         self.pyttsx_engine = None
 
-        # Priority 1: Initialize Windows Native SAPI5 Speaker
+        # Priority 1: Initialize Windows Native SAPI5 Speaker (100% OFFLINE)
         if HAS_WIN32COM:
             try:
                 self.sapi_speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                # Set voice gender if possible
                 try:
                     voices = self.sapi_speaker.GetVoices()
                     target_gender = config.VOICE_GENDER.lower()
@@ -78,38 +79,34 @@ class TextToSpeechEngine:
                             break
                 except Exception:
                     pass
-                print("[TTS Engine]: Native Windows SAPI5 Voice engine initialized.")
+                print("[TTS Engine]: Native Windows SAPI5 Offline Voice engine initialized.")
             except Exception as e:
                 print(f"[TTS Warning]: SAPI5 initialization failed: {e}")
                 self.sapi_speaker = None
 
-        # Priority 2: Initialize pyttsx3 fallback
+        # Priority 2: Initialize pyttsx3 offline fallback
         if not self.sapi_speaker and HAS_PYTTSX3:
             try:
                 self.pyttsx_engine = pyttsx3.init()
                 self.pyttsx_engine.setProperty('rate', config.VOICE_RATE)
                 self.pyttsx_engine.setProperty('volume', config.VOICE_VOLUME)
-                print("[TTS Engine]: pyttsx3 Voice engine initialized.")
+                print("[TTS Engine]: pyttsx3 Offline Voice engine initialized.")
             except Exception as e:
                 print(f"[TTS Warning]: pyttsx3 initialization failed: {e}")
                 self.pyttsx_engine = None
 
     def speak(self, text: str):
-        """
-        Prints and speaks response out loud using native voice audio.
-        """
+        """Prints and speaks response out loud using native offline voice audio."""
         if not text or not text.strip():
             return
 
-        # Print full text to terminal console
         print(f"\n[{config.ASSISTANT_NAME}]: {text}")
 
-        # Clean text for spoken audio synthesizer
         spoken_text = clean_text_for_speech(text)
         if not spoken_text:
             spoken_text = text
 
-        # Option 1: Native Windows SAPI5 (Fastest & most reliable on Windows)
+        # Option 1: Native Windows SAPI5 (100% Offline)
         if self.sapi_speaker:
             try:
                 self.sapi_speaker.Speak(spoken_text)
@@ -117,7 +114,7 @@ class TextToSpeechEngine:
             except Exception as e:
                 print(f"[TTS SAPI5 Error]: {e}")
 
-        # Option 2: pyttsx3 engine
+        # Option 2: pyttsx3 engine (100% Offline)
         if self.pyttsx_engine:
             try:
                 self.pyttsx_engine.say(spoken_text)
@@ -129,7 +126,7 @@ class TextToSpeechEngine:
 
 class SpeechToTextEngine:
     """
-    Wrapper around speech_recognition library for microphone audio capture and STT recognition.
+    Wrapper around speech_recognition library with robust Offline Fallback support.
     """
     def __init__(self):
         self.recognizer = sr.Recognizer()
@@ -137,9 +134,7 @@ class SpeechToTextEngine:
         self.recognizer.dynamic_energy_threshold = True
 
     def calibrate_ambient_noise(self, microphone: sr.Microphone):
-        """
-        Adjusts recognizer sensitivity based on background ambient noise.
-        """
+        """Adjusts recognizer sensitivity based on background ambient noise."""
         print("Calibrating microphone for ambient background noise...")
         with microphone as source:
             self.recognizer.adjust_for_ambient_noise(source, duration=config.CALIBRATION_DURATION)
@@ -148,6 +143,7 @@ class SpeechToTextEngine:
     def listen_and_recognize(self, microphone: sr.Microphone, timeout: int = 5, phrase_time_limit: int = 8) -> str:
         """
         Captures audio from microphone and converts to text string.
+        Falls back gracefully to offline mode if internet is disconnected.
         """
         try:
             with microphone as source:
@@ -155,18 +151,38 @@ class SpeechToTextEngine:
                 audio = self.recognizer.listen(source, timeout=timeout, phrase_time_limit=phrase_time_limit)
                 
             print("Processing audio...")
-            text = self.recognizer.recognize_google(audio)
-            print(f"[You Said]: \"{text}\"")
-            return text.strip()
+
+            # 1. Try Online Google STT
+            try:
+                text = self.recognizer.recognize_google(audio)
+                print(f"[You Said]: \"{text}\"")
+                return text.strip()
+            except sr.RequestError:
+                # Catch internet disconnection / offline network error
+                print("[STT Notice]: Internet offline. Attempting Offline Recognition...")
+                
+                # 2. Try Offline Vosk STT if installed
+                if HAS_VOSK:
+                    try:
+                        vosk_text = self.recognizer.recognize_vosk(audio)
+                        print(f"[You Said (Offline)]: \"{vosk_text}\"")
+                        return vosk_text.strip()
+                    except Exception:
+                        pass
+
+                # 3. Offline Keyboard Fallback when offline
+                print("[Offline Mode]: Active. Please type your command below:")
+                try:
+                    fallback_text = input("⌨️ [Offline Input] Command: ").strip()
+                    return fallback_text
+                except Exception:
+                    return ""
 
         except sr.WaitTimeoutError:
             return ""
         except sr.UnknownValueError:
             print("[STT]: Could not understand the audio clearly.")
             return ""
-        except sr.RequestError as e:
-            print(f"[STT Error]: Speech Recognition service request failed: {e}")
-            return ""
         except Exception as e:
-            print(f"[STT Error]: Audio capture failed: {e}")
+            print(f"[STT Error]: Audio capture error ({e}).")
             return ""

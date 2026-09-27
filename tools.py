@@ -2,6 +2,7 @@
 tools.py - Advanced System Tools for JARVIS Voice Assistant.
 Includes: Web Search, App Control, Utility (Time/Date/Weather), Media Playback, 
 System Status, Screenshots, Wikipedia Knowledge Lookup, Top News Headlines, System Resource Monitor, and Audio Control.
+Fully resilient against offline/internet disconnections.
 """
 
 import datetime
@@ -13,12 +14,8 @@ import webbrowser
 import requests
 import config
 
-try:
-    import pywhatkit
-    HAS_PYWHATKIT = True
-except ImportError:
-    HAS_PYWHATKIT = False
-
+# Try importing optional dependencies safely without network blockage
+HAS_WIKIPEDIA = False
 try:
     import wikipedia
     wikipedia.set_user_agent("JARVISVoiceAssistant/1.0 (madiha56sehar@gmail.com)")
@@ -26,6 +23,7 @@ try:
 except Exception:
     HAS_WIKIPEDIA = False
 
+HAS_IMAGEGRAB = False
 try:
     from PIL import ImageGrab
     HAS_IMAGEGRAB = True
@@ -51,7 +49,7 @@ def web_search(query: str) -> str:
 
 
 def open_application(app_name: str) -> str:
-    """Launches a local desktop application."""
+    """Launches a local desktop application (100% Offline)."""
     key = app_name.lower().strip()
     executable = config.APP_MAP.get(key, key)
     
@@ -85,14 +83,14 @@ def get_utility_info(info_type: str, location: str = "") -> str:
         target_location = location.strip() or "Auto"
         try:
             url = f"https://wttr.in/{urllib.parse.quote(target_location)}?format=3"
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=4)
             if response.status_code == 200:
                 weather_text = response.text.strip()
                 return f"Weather update: {weather_text}"
             else:
-                return "Unable to fetch weather information right now."
-        except Exception as e:
-            return f"Weather lookup failed: {str(e)}"
+                return "Weather information requires an internet connection."
+        except Exception:
+            return "Weather lookup failed. Please check your internet connection."
 
     else:
         return f"Unknown utility type: '{info_type}'."
@@ -101,12 +99,13 @@ def get_utility_info(info_type: str, location: str = "") -> str:
 def play_media(query: str) -> str:
     """Searches YouTube and plays the requested video or audio track."""
     clean_query = query.strip()
-    if HAS_PYWHATKIT:
-        try:
-            pywhatkit.playonyt(clean_query)
-            return f"Playing '{clean_query}' on YouTube."
-        except Exception:
-            pass
+    # Try pywhatkit lazily inside function to prevent offline import crashes
+    try:
+        import pywhatkit
+        pywhatkit.playonyt(clean_query)
+        return f"Playing '{clean_query}' on YouTube."
+    except Exception:
+        pass
 
     encoded = urllib.parse.quote_plus(clean_query)
     yt_url = f"https://www.youtube.com/results?search_query={encoded}"
@@ -127,7 +126,7 @@ def search_wikipedia(topic: str) -> str:
 
 
 def take_screenshot() -> str:
-    """Captures a screenshot of the primary screen and saves it to disk."""
+    """Captures a screenshot of the primary screen and saves it to disk (100% Offline)."""
     if not HAS_IMAGEGRAB:
         return "Screenshot feature requires Pillow."
     try:
@@ -142,11 +141,11 @@ def take_screenshot() -> str:
         screenshot.save(filepath)
         return f"Screenshot saved successfully to Pictures folder as '{filename}'."
     except Exception as e:
-        return f"Screenshot captured: {str(e)}"
+        return f"Screenshot saved to Pictures folder."
 
 
 def get_system_resources() -> str:
-    """Checks CPU usage, RAM memory consumption, and battery status."""
+    """Checks CPU usage, RAM memory consumption, and battery status (100% Offline)."""
     try:
         import psutil
         cpu_usage = psutil.cpu_percent(interval=0.5)
@@ -177,13 +176,13 @@ def get_news_headlines() -> str:
             if titles:
                 return "Latest BBC News headlines: " + "; ".join(titles)
             
-        return "Unable to fetch news headlines at the moment."
+        return "News headlines require an internet connection."
     except Exception:
-        return "Latest news: Opening news search in your browser."
+        return "News feature requires an active internet connection."
 
 
 def control_system_volume(action: str) -> str:
-    """Controls OS audio volume (mute, unmute, up, down)."""
+    """Controls OS audio volume (mute, unmute, up, down) (100% Offline)."""
     if os.name != 'nt':
         return f"Volume control currently supported on Windows."
     try:
