@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 # --- Assistant Settings ---
-ASSISTANT_NAME = "JARVIS"
+ASSISTANT_NAME = "Madhu"
 VOICE_GENDER = "female"  # 'male' or 'female'
 VOICE_RATE = 175         # Words per minute (175 is clear & natural)
 VOICE_VOLUME = 1.0       # Volume (0.0 to 1.0)

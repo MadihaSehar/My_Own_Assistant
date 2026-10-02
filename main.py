@@ -24,7 +24,7 @@ def print_banner(mic_info: str):
     """Prints status banner to terminal."""
     banner = f"""
     ============================================================
-       [JARVIS] - Personal AI Voice Assistant
+       [{config.ASSISTANT_NAME.upper()}] - Personal AI Voice Assistant
     ============================================================
        Status    : Active & Ready
        Provider  : {config.LLM_PROVIDER.upper()} Mode
@@ -64,7 +64,7 @@ def main():
         tts.speak(f"Microphone not found. Running in keyboard mode. Type your commands.")
 
     # ── Step 3: Continuous loop ─────────────────────────────
-    print("\n[READY]: JARVIS is listening. Speak now...\n")
+    print(f"\n[READY]: {config.ASSISTANT_NAME} is listening. Speak now...\n")
     
     while True:
         command_text = ""
@@ -82,7 +82,7 @@ def main():
                     break
 
         except KeyboardInterrupt:
-            print("\n[JARVIS]: Keyboard interrupt received.")
+            print(f"\n[{config.ASSISTANT_NAME}]: Keyboard interrupt received.")
             tts.speak("Shutting down. Goodbye!")
             break
         except Exception as e:
@@ -100,7 +100,7 @@ def main():
         cleaned = command_text.lower().strip()
         if any(cleaned == cmd or cleaned.startswith(cmd) for cmd in EXIT_COMMANDS):
             tts.speak(f"Goodbye! Shutting down {config.ASSISTANT_NAME}.")
-            print("\n[JARVIS]: Shut down cleanly.")
+            print(f"\n[{config.ASSISTANT_NAME}]: Shut down cleanly.")
             break
 
         # ── Process intent → Execute tools → Speak response ──
