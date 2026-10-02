@@ -17,7 +17,7 @@ if sys.stdout.encoding != 'utf-8':
 
 import config
 from tools import (
-    TOOLS_SCHEMA, execute_tool_call, open_application, web_search, 
+    TOOLS_SCHEMA, execute_tool_call, open_application, close_application, web_search, 
     get_utility_info, play_media, search_wikipedia, take_screenshot, 
     get_system_resources, get_news_headlines, control_system_volume
 )
@@ -249,6 +249,13 @@ class AIBrain:
             if match:
                 app_target = match.group(2).replace("app", "").replace("application", "").strip()
                 return open_application(app_target)
+
+        # Application Close Intent (e.g. "close chrome", "kill notepad", "terminate spotify")
+        if re.search(r"\b(close|kill|terminate|stop)\b", lowered) and not re.search(r"\b(music|song|video|youtube)\b", lowered):
+            match = re.search(r"\b(close|kill|terminate|stop)\s+(.+)", lowered)
+            if match:
+                app_target = match.group(2).replace("app", "").replace("application", "").strip()
+                return close_application(app_target)
 
         # Web Search Intent (e.g. "search google for python", "look up weather forecast")
         if re.search(r"\b(search|search google for|google|look up)\b", lowered):
