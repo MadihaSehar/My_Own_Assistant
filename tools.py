@@ -55,7 +55,8 @@ def open_application(app_name: str) -> str:
     
     try:
         if os.name == 'nt':  # Windows
-            subprocess.Popen(f"start {executable}", shell=True)
+            # Empty quotes first handles cases where the executable path has spaces
+            subprocess.Popen(f'start "" "{executable}"', shell=True)
         elif os.name == 'posix':  # macOS / Linux
             subprocess.Popen([executable])
         else:
