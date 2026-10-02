@@ -97,6 +97,9 @@ class TextToSpeechEngine:
             return
         print(f"\n[{config.ASSISTANT_NAME}]: {text}")
         spoken = clean_text_for_speech(text) or text
+        
+        # Phonetic pronunciation fix for SAPI engine so it sounds human
+        spoken = re.sub(r'\bMadhu\b', 'Maa dhoo', spoken, flags=re.IGNORECASE)
 
         if self.sapi_speaker:
             try:

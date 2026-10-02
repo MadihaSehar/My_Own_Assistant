@@ -77,11 +77,12 @@ class AIBrain:
         Processes intent and multi-tool calls using OpenAI Chat Completions API with Function Calling.
         """
         system_prompt = (
-            f"You are {config.ASSISTANT_NAME}, a warm, highly intelligent, and talkative AI voice assistant. "
-            "Respond naturally like a friendly human companion. "
-            "If the user asks multiple actions (e.g. open an app AND search the web AND check weather), "
+            f"You are {config.ASSISTANT_NAME}, a highly personalized, warm, and natural AI voice assistant. "
+            "You are like Siri but much friendlier, acting as a true companion. "
+            "Never sound robotic or overly formal. Speak with empathy, use casual language, and keep it human-like. "
+            "Always keep spoken responses concise and fluid. Don't make lists unless asked. "
+            "If the user asks multiple actions (e.g. open an app AND search the web), "
             "call ALL relevant functions simultaneously in a single turn. "
-            "Keep spoken responses fluid, cheerful, concise, and direct."
         )
 
         messages = [{"role": "system", "content": system_prompt}]
@@ -161,9 +162,9 @@ class AIBrain:
 
         # Fallback conversational response
         return random.choice([
-            f"I'm here for you! You mentioned '{text}'. I can open apps, search Google, play music, check weather, or take a screenshot.",
-            f"That sounds interesting! I heard: '{text}'. How else can I assist you right now?",
-            f"I'm listening! Tell me if you'd like me to launch an app, search Wikipedia, check CPU/RAM usage, or play a song."
+            f"Got it. You mentioned '{text}'. I'm still learning, but I can open apps, search the web, or play music if you want!",
+            f"Hmm, '{text}'. I'm listening! What else are you up to?",
+            f"I hear you! Just let me know if you want me to pull up an app, play a song, or check something online for you."
         ])
 
     def _single_local_intent(self, text: str) -> str:
@@ -178,20 +179,20 @@ class AIBrain:
 
         if re.search(r"\b(how are you|how are u|how\'s it going|how do you do|how are you doing)\b", lowered):
             responses = [
-                "I'm doing fantastic, thank you for asking! I'm ready to help you with anything you need.",
-                "I'm feeling great and operating at peak performance! How are you doing today?",
-                "All systems are online and running smoothly! How can I assist you right now?"
+                "I'm doing great! Just hanging out here with you. How's your day going?",
+                "I'm feeling wonderful! Thanks for asking. What are you up to?",
+                "Everything's perfect on my end! What's on your mind today?"
             ]
             return random.choice(responses)
 
         if re.search(r"\b(who are you|what is your name|what\'s your name|who made you|who created you)\b", lowered):
-            return f"I am {config.ASSISTANT_NAME}, your personal AI voice assistant created to help you manage tasks, search the web, play media, and execute system commands!"
+            return f"I'm {config.ASSISTANT_NAME}! I'm your personal AI, here to help you out with whatever you need."
 
         if re.search(r"\b(what can you do|help|features|what do you do|how to use)\b", lowered):
-            return "I can search Google or Wikipedia, open applications, play YouTube music, check weather, CPU/RAM status, take screenshots, read news, or adjust system volume!"
+            return "Oh, lots of things! I can open or close apps for you, play music, check the weather, look things up online, and just chat with you."
 
         if re.search(r"\b(hello|hi|hey|greetings|good morning|good afternoon|good evening)\b", lowered):
-            return f"Hello there! I'm {config.ASSISTANT_NAME}. What can I do for you today?"
+            return f"Hey there! I'm {config.ASSISTANT_NAME}. What's up?"
 
         if re.search(r"\b(thank you|thanks|thx|awesome|great job|well done)\b", lowered):
             return "You're very welcome! I'm always happy to help."
@@ -247,14 +248,14 @@ class AIBrain:
         if re.search(r"\b(open|launch|start|run)\b", lowered):
             match = re.search(r"\b(open|launch|start|run)\s+(.+)", lowered)
             if match:
-                app_target = match.group(2).replace("app", "").replace("application", "").strip()
+                app_target = match.group(2).replace("the ", "").replace(" app", "").replace(" application", "").strip()
                 return open_application(app_target)
 
         # Application Close Intent (e.g. "close chrome", "kill notepad", "terminate spotify")
-        if re.search(r"\b(close|kill|terminate|stop)\b", lowered) and not re.search(r"\b(music|song|video|youtube)\b", lowered):
-            match = re.search(r"\b(close|kill|terminate|stop)\s+(.+)", lowered)
+        if re.search(r"\b(close|kill|terminate|stop|exit)\b", lowered) and not re.search(r"\b(music|song|video|youtube)\b", lowered):
+            match = re.search(r"\b(close|kill|terminate|stop|exit)\s+(.+)", lowered)
             if match:
-                app_target = match.group(2).replace("app", "").replace("application", "").strip()
+                app_target = match.group(2).replace("the ", "").replace(" app", "").replace(" application", "").strip()
                 return close_application(app_target)
 
         # Web Search Intent (e.g. "search google for python", "look up weather forecast")
