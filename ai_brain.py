@@ -81,6 +81,7 @@ class AIBrain:
             "You are like Siri but much friendlier, acting as a true companion. "
             "Never sound robotic or overly formal. Speak with empathy, use casual language, and keep it human-like. "
             "Always keep spoken responses concise and fluid. Don't make lists unless asked. "
+            "If the user asks to open an app, use the open_application tool. If they ask to close an app, use the close_application tool. "
             "If the user asks multiple actions (e.g. open an app AND search the web), "
             "call ALL relevant functions simultaneously in a single turn. "
         )
@@ -244,19 +245,19 @@ class AIBrain:
             query = query.replace("on youtube", "").strip()
             return play_media(query)
 
-        # Application Control Intent (e.g. "open notepad", "launch calculator", "start chrome")
-        if re.search(r"\b(open|launch|start|run)\b", lowered):
-            match = re.search(r"\b(open|launch|start|run)\s+(.+)", lowered)
-            if match:
-                app_target = match.group(2).replace("the ", "").replace(" app", "").replace(" application", "").strip()
-                return open_application(app_target)
-
         # Application Close Intent (e.g. "close chrome", "kill notepad", "terminate spotify")
         if re.search(r"\b(close|kill|terminate|stop|exit)\b", lowered) and not re.search(r"\b(music|song|video|youtube)\b", lowered):
             match = re.search(r"\b(close|kill|terminate|stop|exit)\s+(.+)", lowered)
             if match:
                 app_target = match.group(2).replace("the ", "").replace(" app", "").replace(" application", "").strip()
                 return close_application(app_target)
+
+        # Application Control Intent (e.g. "open notepad", "launch calculator", "start chrome")
+        if re.search(r"\b(open|launch|start|run)\b", lowered):
+            match = re.search(r"\b(open|launch|start|run)\s+(.+)", lowered)
+            if match:
+                app_target = match.group(2).replace("the ", "").replace(" app", "").replace(" application", "").strip()
+                return open_application(app_target)
 
         # Web Search Intent (e.g. "search google for python", "look up weather forecast")
         if re.search(r"\b(search|search google for|google|look up)\b", lowered):

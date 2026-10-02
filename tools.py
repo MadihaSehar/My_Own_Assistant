@@ -74,6 +74,8 @@ def close_application(app_name: str) -> str:
     
     try:
         if os.name == 'nt':  # Windows
+            if not executable.lower().endswith(".exe"):
+                executable += ".exe"
             subprocess.run(["taskkill", "/IM", executable, "/F"], capture_output=True)
         elif os.name == 'posix':  # macOS / Linux
             subprocess.run(["pkill", "-f", executable])
