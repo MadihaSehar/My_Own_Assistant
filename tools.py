@@ -67,6 +67,24 @@ def open_application(app_name: str) -> str:
         return f"Failed to open '{app_name}'. Details: {str(e)}"
 
 
+def close_application(app_name: str) -> str:
+    """Closes a local desktop application (100% Offline)."""
+    key = app_name.lower().strip()
+    executable = config.APP_MAP.get(key, key)
+    
+    try:
+        if os.name == 'nt':  # Windows
+            subprocess.run(["taskkill", "/IM", executable, "/F"], capture_output=True)
+        elif os.name == 'posix':  # macOS / Linux
+            subprocess.run(["pkill", "-f", executable])
+        else:
+            return f"Unsupported Operating System: {os.name}"
+            
+        return f"Successfully closed application: '{app_name}'."
+    except Exception as e:
+        return f"Failed to close '{app_name}'. Details: {str(e)}"
+
+
 def get_utility_info(info_type: str, location: str = "") -> str:
     """Retrieves utility information such as system time, date, or weather."""
     req_type = info_type.lower().strip()
@@ -238,6 +256,20 @@ TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
+            "name": "close_application",
+            "description": "Closes or terminates local apps like Notepad, Chrome, Calculator, etc.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app_name": {"type": "string", "description": "Application name to close."}
+                },
+                "required": ["app_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_utility_info",
             "description": "Gets current time, date, day of week, or local weather forecast.",
             "parameters": {
@@ -329,6 +361,7 @@ TOOLS_SCHEMA = [
 TOOL_DISPATCHER = {
     "web_search": web_search,
     "open_application": open_application,
+    "close_application": close_application,
     "get_utility_info": get_utility_info,
     "play_media": play_media,
     "search_wikipedia": search_wikipedia,
